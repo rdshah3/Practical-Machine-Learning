@@ -1,106 +1,143 @@
-Practical Machine Learning - Prediction Assignment Writeup
-==========================================================
+---
+title: "Practical Machine Learning - Prediction Assignment Writeup"
+author: "Roshan Shah"
+date: "Thursday, July 23, 2015"
+output: html_document
+---
 
-For this assignment I analyzed the provided data to determine what activity an individual perform.
-To do this I made use of caret and randomForest, this allowed me to generate correct answers for
-each of the 20 test data cases provided in this assignment.  I made use of a seed value for 
-consistent results.
+Background
+--------------------------------------------
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
 
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+Data
+--------------------------------------------
+
+First, we need to read in the training and test data sets.
+
+```{r, load data} 
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",na.strings=c("", "NA", "NULL"))
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",na.strings=c("", "NA", "NULL"))
+```
 
 ```{r}
-library(Hmisc)
+dim(training)
+dim(testing)
+```
+
+Let's get some summary statistics on the training dataset.
+```{r, results='hide'}
+summary(training)
+```
+
+- Remove variables that don't have predictive value
+```{r}
+remove <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2","cvtd_timestamp","new_window", "num_window")
+training <- training[,!(names(training) %in% remove)]
+dim(training)
+```
+
+- The summary stats revealed many variables with NAs. We could try to impute these variables using method "knnImpute" from the preProcess function, but since we have so many covariates, let's just filter them out.
+  
+```{r}
+training <- training[ , colSums(is.na(training)) == 0]
+dim(training)
+```
+
+Before we start building a model, let's remove the zero covariates
+
+
+```{r, message=FALSE, echo=FALSE}
 library(caret)
+```
+```{r}
+any(nearZeroVar(training, saveMetrics = TRUE)$nzv == TRUE)
+```
+
+None of the predictors have near zero variance, so we will not eliminate any based on this criteria. However, let's continue pre-processing by evaluating the correlation between variables and remove predictors with a correlation of greater than 0.90. 
+
+```{r, message=FALSE, echo=FALSE}
+library(corrplot)
+```
+```{r}
+M <- abs(cor(training[,-53]))
+```
+```{r, eval=FALSE}
+corrplot(M, type="lower", tl.cex = 0.5, main="Correlation Matrix")
+```
+```{r, echo=FALSE}
+corrplot(M, type="lower", tl.cex = 0.5, main="\nCorrelation Matrix")
+```
+```{r}
+training <- training[,-findCorrelation(M, cutoff = 0.90)]
+dim(training)
+```
+
+After pre-processing, we now have 46 covariates (45 not including the classe variable).
+
+Building the Model
+------------------
+First, we need to create a training and validation set for cross validation.
+
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+training_post <- training[inTrain,]
+validation_post <- training[-inTrain,]
+```
+
+```{r}
+dim(training_post)
+dim(validation_post)
+```
+
+After identifying a lack of correlation between the classe variable and the predictors, a random forest model was chosen.
+
+```{r}
+cor <- abs(sapply(colnames(training_post[, -ncol(training)]), function(x) cor(as.numeric(training_post[, x]), as.numeric(training_post$classe), method = "spearman")))
+```
+
+Build a random forest model using the training data set and 4-fold cross validation. 
+
+```{r, Train model}
+set.seed(3456)
 library(randomForest)
-library(foreach)
-library(doParallel)
-set.seed(2048)
-options(warn=-1)
+modelFit <- train(classe ~ ., method="rf", data=training_post, trControl=trainControl(method="cv", number=4), importance=TRUE, allowParallel=TRUE)
+modelFit$finalModel
+# closeAllConnections()
 ```
 
-First, I loaded the data both from the provided training and test data provided by COURSERA.
-Some values contained a "#DIV/0!" that I replaced with an NA value.
+Evaluate the accuracy of the model by applying it to the validation dataset.
 
 ```{r}
-training_data <- read.csv("pml-training.csv", na.strings=c("#DIV/0!") )
-evaluation_data <- read.csv("pml-testing.csv", na.strings=c("#DIV/0!") )
+validation_predict <- predict(modelFit, newdata=validation_post)
+cf <- confusionMatrix(validation_predict, validation_post$classe)
+cf
 ```
 
-I also casted all columns 8 to the end to be numeric.
+Evaluate the importance of the predictors.
 
 ```{r}
-for(i in c(8:ncol(training_data)-1)) {training_data[,i] = as.numeric(as.character(training_data[,i]))}
+imp <- varImp(modelFit)$importance
+varImpPlot(modelFit$finalModel, sort = TRUE, main = "Importance of the Predictors")
 
-for(i in c(8:ncol(evaluation_data)-1)) {evaluation_data[,i] = as.numeric(as.character(evaluation_data[,i]))}
 ```
 
-Some columns were mostly blank.  These did not contribute well to the prediction.  I chose a feature
-set that only included complete columns.  We also remove user name, timestamps and windows.  
+After predicting results from the validation dataset, the random forest model, using 4-fold cross validation, has an accuracy of `r cf$overall["Accuracy"]`, giving us an out-of-sample error of `r (1-cf$overall["Accuracy"])*100`%
 
-Determine and display out feature set.
-
-```{r}
-feature_set <- colnames(training_data[colSums(is.na(training_data)) == 0])[-(1:7)]
-model_data <- training_data[feature_set]
-feature_set
-```
-
-We now have the model data built from our feature set.
-
-```{r}
-idx <- createDataPartition(y=model_data$classe, p=0.75, list=FALSE )
-training <- model_data[idx,]
-testing <- model_data[-idx,]
-```
-
-We now build 5 random forests with 150 trees each. We make use of parallel processing to build this
-model. I found several examples of how to perform parallel processing with random forests in R, this
-provided a great speedup.
-
-```{r}
-registerDoParallel()
-x <- training[-ncol(training)]
-y <- training$classe
-
-rf <- foreach(ntree=rep(150, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
-randomForest(x, y, ntree=ntree) 
-}
-```
-
-Provide error reports for both training and test data.
-```{r}
-predictions1 <- predict(rf, newdata=training)
-confusionMatrix(predictions1,training$classe)
-
-
-predictions2 <- predict(rf, newdata=testing)
-confusionMatrix(predictions2,testing$classe)
-```
-
-Conclusions and Test Data Submit
+Prediction
 --------------------------------
-
-As can be seen from the confusion matrix this model is very accurate.  I did experiment with PCA 
-and other models, but did not get as good of accuracy. Because my test data was around 99% 
-accurate I expected nearly all of the submitted test cases to be correct.  It turned out they 
-were all correct.
-
-Prepare the submission. (using COURSERA provided code)
+Finally, let's use the validated model to predict values from the testing dataset.
 
 ```{r}
-pml_write_files = function(x){
-  n = length(x)
-  for(i in 1:n){
-    filename = paste0("problem_id_",i,".txt")
-    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
-  }
+testing_pred <- predict(modelFit, newdata=testing)
+write_files <- function(x) {
+        n <- length(x)
+        for (i in 1:n) {
+                filename <- paste0("problem_id", i, ".txt")
+                write.table(x[i], file=filename, quote=FALSE, row.names=FALSE,col.names=FALSE)
+        }
 }
-
-
-x <- evaluation_data
-x <- x[feature_set[feature_set!='classe']]
-answers <- predict(rf, newdata=x)
-
-answers
-
-pml_write_files(answers)
+write_files(testing_pred)
 ```
+
