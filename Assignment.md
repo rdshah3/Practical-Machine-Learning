@@ -109,6 +109,7 @@ First, we need to create a training and validation set for cross validation.
 
 
 ```r
+set.seed(3456)
 inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
 training_post <- training[inTrain,]
 validation_post <- training[-inTrain,]
@@ -141,15 +142,6 @@ cor <- abs(sapply(colnames(training_post[, -ncol(training)]), function(x) cor(as
 Build a random forest model using the training data set and 4-fold cross validation. 
 
 
-```r
-set.seed(3456)
-library(randomForest)
-```
-
-```
-## randomForest 4.6-10
-## Type rfNews() to see new features/changes/bug fixes.
-```
 
 ```r
 modelFit <- train(classe ~ ., method="rf", data=training_post, trControl=trainControl(method="cv", number=4), importance=TRUE, allowParallel=TRUE)
@@ -162,20 +154,16 @@ modelFit$finalModel
 ##  randomForest(x = x, y = y, mtry = param$mtry, importance = TRUE,      allowParallel = TRUE) 
 ##                Type of random forest: classification
 ##                      Number of trees: 500
-## No. of variables tried at each split: 2
+## No. of variables tried at each split: 23
 ## 
-##         OOB estimate of  error rate: 0.82%
+##         OOB estimate of  error rate: 0.66%
 ## Confusion matrix:
 ##      A    B    C    D    E class.error
-## A 3901    2    1    0    2 0.001280082
-## B   19 2632    7    0    0 0.009781791
-## C    0   24 2368    4    0 0.011686144
-## D    0    0   46 2205    1 0.020870337
-## E    0    0    2    4 2519 0.002376238
-```
-
-```r
-# closeAllConnections()
+## A 3901    4    0    0    1 0.001280082
+## B   15 2635    7    1    0 0.008653123
+## C    0   19 2370    7    0 0.010851419
+## D    0    0   23 2227    2 0.011101243
+## E    0    0    3    8 2514 0.004356436
 ```
 
 Evaluate the accuracy of the model by applying it to the validation dataset.
@@ -192,33 +180,33 @@ cf
 ## 
 ##           Reference
 ## Prediction    A    B    C    D    E
-##          A 1674    6    0    0    0
-##          B    0 1128    5    0    2
-##          C    0    5 1021   15    0
-##          D    0    0    0  948    1
-##          E    0    0    0    1 1079
+##          A 1674    8    0    0    0
+##          B    0 1129    1    0    0
+##          C    0    2 1020   12    2
+##          D    0    0    5  952    1
+##          E    0    0    0    0 1079
 ## 
 ## Overall Statistics
 ##                                           
-##                Accuracy : 0.9941          
-##                  95% CI : (0.9917, 0.9959)
+##                Accuracy : 0.9947          
+##                  95% CI : (0.9925, 0.9964)
 ##     No Information Rate : 0.2845          
 ##     P-Value [Acc > NIR] : < 2.2e-16       
 ##                                           
-##                   Kappa : 0.9925          
+##                   Kappa : 0.9933          
 ##  Mcnemar's Test P-Value : NA              
 ## 
 ## Statistics by Class:
 ## 
 ##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            1.0000   0.9903   0.9951   0.9834   0.9972
-## Specificity            0.9986   0.9985   0.9959   0.9998   0.9998
-## Pos Pred Value         0.9964   0.9938   0.9808   0.9989   0.9991
-## Neg Pred Value         1.0000   0.9977   0.9990   0.9968   0.9994
+## Sensitivity            1.0000   0.9912   0.9942   0.9876   0.9972
+## Specificity            0.9981   0.9998   0.9967   0.9988   1.0000
+## Pos Pred Value         0.9952   0.9991   0.9846   0.9937   1.0000
+## Neg Pred Value         1.0000   0.9979   0.9988   0.9976   0.9994
 ## Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
-## Detection Rate         0.2845   0.1917   0.1735   0.1611   0.1833
-## Detection Prevalence   0.2855   0.1929   0.1769   0.1613   0.1835
-## Balanced Accuracy      0.9993   0.9944   0.9955   0.9916   0.9985
+## Detection Rate         0.2845   0.1918   0.1733   0.1618   0.1833
+## Detection Prevalence   0.2858   0.1920   0.1760   0.1628   0.1833
+## Balanced Accuracy      0.9991   0.9955   0.9954   0.9932   0.9986
 ```
 
 Evaluate the importance of the predictors.
@@ -229,9 +217,9 @@ imp <- varImp(modelFit)$importance
 varImpPlot(modelFit$finalModel, sort = TRUE, main = "Importance of the Predictors")
 ```
 
-![](Assignment_files/figure-html/unnamed-chunk-16-1.png) 
+![](Assignment_files/figure-html/unnamed-chunk-17-1.png) 
 
-After predicting results from the validation dataset, the random forest model, using 4-fold cross validation, has an accuracy of 0.9940527, giving us an out-of-sample error of 0.5947324%
+After predicting results from the validation dataset, the random forest model, using 4-fold cross validation, has an accuracy of 0.9947, giving us an out-of-sample error of 0.5268%
 
 Prediction
 --------------------------------
